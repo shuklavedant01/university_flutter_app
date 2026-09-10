@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/dsr_request.dart';
+import '../../services/autocops_privacy_service.dart';
+import '../../widgets/autocops_privacy_banner.dart';
 
 class DataSubjectRightsScreen extends StatefulWidget {
   const DataSubjectRightsScreen({super.key});
@@ -15,6 +17,35 @@ class _DataSubjectRightsScreenState extends State<DataSubjectRightsScreen> {
   bool _alumniMarketing = false;
 
   @override
+  void initState() {
+    super.initState();
+    AutoCopsPrivacyService.instance.addListener(_onAutoCopsStateChanged);
+  }
+
+  @override
+  void dispose() {
+    AutoCopsPrivacyService.instance.removeListener(_onAutoCopsStateChanged);
+    super.dispose();
+  }
+
+  void _onAutoCopsStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _openAutoCopsModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => AutoCopsPrivacyBanner(
+        onConsentRecorded: () {
+          Navigator.pop(ctx);
+        },
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -23,6 +54,10 @@ class _DataSubjectRightsScreenState extends State<DataSubjectRightsScreen> {
         children: [
           // Banner Header
           _buildPrivacyBanner(context),
+          const SizedBox(height: 20),
+
+          // AutoCops Cookie & Tracking Governance Card
+          _buildAutoCopsConsentCard(context),
           const SizedBox(height: 20),
 
           // Active Request Tracker Card
@@ -104,6 +139,133 @@ class _DataSubjectRightsScreenState extends State<DataSubjectRightsScreen> {
     );
   }
 
+  Widget _buildAutoCopsConsentCard(BuildContext context) {
+    final service = AutoCopsPrivacyService.instance;
+    final consent = service.consentState;
+    final visitorId = service.visitorId;
+
+    final isAnalytics = service.isCategoryAccepted(AutoCopsPrivacyService.catAnalytics);
+    final isFunctional = service.isCategoryAccepted(AutoCopsPrivacyService.catFunctional);
+    final isMarketing = service.isCategoryAccepted(AutoCopsPrivacyService.catMarketing);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.outlineVariant),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x080F2942),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.shield, color: AppColors.tertiaryFixedDim, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'AutoCops Privacy & Cookie Policy',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                      Text(
+                        'Domain: University-App • Platform: AutoCops Engine',
+                        style: TextStyle(fontSize: 10, color: AppColors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: service.hasGivenConsent ? AppColors.successContainer : AppColors.warningContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  service.hasGivenConsent ? 'COMPLIANT' : 'ACTION NEEDED',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: service.hasGivenConsent ? AppColors.success : AppColors.warning,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Cookie and device identifier permissions are bound to Data Principal ID: $visitorId and enforced across all sessions.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 10),
+          // Category pills
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildStatusPill('Essential: ON', true),
+              _buildStatusPill('Analytics: ${isAnalytics ? "ON" : "OFF"}', isAnalytics),
+              _buildStatusPill('Functional: ${isFunctional ? "ON" : "OFF"}', isFunctional),
+              _buildStatusPill('Marketing: ${isMarketing ? "ON" : "OFF"}', isMarketing),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openAutoCopsModal(context),
+              icon: const Icon(Icons.tune, size: 16),
+              label: const Text(
+                'Update Cookie & Privacy Preferences',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusPill(String label, bool isActive) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isActive ? AppColors.surfaceLow : AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isActive ? AppColors.primary.withOpacity(0.3) : AppColors.outlineVariant,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: isActive ? AppColors.primary : AppColors.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPrivacyBanner(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -135,7 +297,7 @@ class _DataSubjectRightsScreenState extends State<DataSubjectRightsScreen> {
                     Icon(Icons.verified_user, size: 14, color: AppColors.tertiaryFixedDim),
                     SizedBox(width: 4),
                     Text(
-                      'FERPA • GDPR • CCPA',
+                      'FERPA • GDPR • CCPA • DPDP',
                       style: TextStyle(
                         color: AppColors.tertiaryFixedDim,
                         fontSize: 10,

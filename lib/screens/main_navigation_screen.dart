@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/university_header.dart';
+import '../widgets/autocops_privacy_banner.dart';
+import '../services/autocops_privacy_service.dart';
 import 'home/campus_home_screen.dart';
 import 'contact/contact_us_screen.dart';
 import 'dsr/data_subject_rights_screen.dart';
@@ -15,6 +17,7 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  bool _showPrivacyBanner = true;
 
   final List<String> _subtitles = [
     'Home',
@@ -23,6 +26,28 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     'Grievance',
     'Academics',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final service = AutoCopsPrivacyService.instance;
+    _showPrivacyBanner = !service.hasGivenConsent;
+    service.addListener(_onPrivacyStateChanged);
+  }
+
+  @override
+  void dispose() {
+    AutoCopsPrivacyService.instance.removeListener(_onPrivacyStateChanged);
+    super.dispose();
+  }
+
+  void _onPrivacyStateChanged() {
+    if (mounted) {
+      setState(() {
+        _showPrivacyBanner = !AutoCopsPrivacyService.instance.hasGivenConsent;
+      });
+    }
+  }
 
   void _onTabTapped(int index) {
     setState(() {
@@ -44,9 +69,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       appBar: UniversityHeader(
         subtitle: _subtitles[_currentIndex],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentIndex,
+            children: screens,
+          ),
+          if (_showPrivacyBanner)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AutoCopsPrivacyBanner(
+                onConsentRecorded: () {
+                  setState(() {
+                    _showPrivacyBanner = false;
+                  });
+                },
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,

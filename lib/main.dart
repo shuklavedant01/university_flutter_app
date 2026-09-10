@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/main_navigation_screen.dart';
+import 'services/autocops_privacy_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AutoCopsPrivacyService.instance.initialize();
   runApp(const VeritasUniversityApp());
 }
 

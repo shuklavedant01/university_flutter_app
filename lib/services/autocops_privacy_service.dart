@@ -540,6 +540,139 @@ class AutoCopsPrivacyService extends ChangeNotifier {
       consentIds: registeredIds,
     );
   }
+
+  /// Initiates DSR Challenge (Stage 1 OTP generation)
+  Future<DsrInitiateResult> initiateDsrChallenge({
+    required String name,
+    required String email,
+    required String requestType,
+    required String description,
+  }) async {
+    final payload = {
+      'name': name.trim(),
+      'email': email.trim(),
+      'request_type': requestType,
+      'description': description.trim(),
+      'domain': domain,
+    };
+
+    final endpoints = [
+      'https://app.autocops.org/v1/public/dsr/initiate',
+      'https://autocops.org/v1/public/dsr/initiate',
+    ];
+
+    String? lastError;
+    for (final endpoint in endpoints) {
+      try {
+        final uri = Uri.parse(endpoint);
+        final response = await http
+            .post(
+              uri,
+              headers: {
+                'Content-Type': 'application/json; charset=UTF-8',
+                'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+              },
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 10));
+
+        debugPrint('[AutoCops DSR Initiate] $endpoint returned ${response.statusCode}: ${response.body}');
+        final dynamic data = jsonDecode(response.body);
+
+        if (data is Map && (response.statusCode == 200 || data['ok'] == true)) {
+          return DsrInitiateResult(
+            ok: true,
+            challengeId: data['challenge_id']?.toString(),
+            emailMasked: data['email_masked']?.toString(),
+            message: data['message']?.toString(),
+          );
+        } else if (data is Map) {
+          final err = (data['detail'] ?? data['message'] ?? 'Failed with status ${response.statusCode}').toString();
+          if (response.statusCode < 500) {
+            return DsrInitiateResult(ok: false, error: err);
+          }
+          lastError = err;
+        }
+      } catch (e) {
+        debugPrint('[AutoCops DSR Initiate] Error at $endpoint: $e');
+        lastError = e.toString();
+      }
+    }
+
+    return DsrInitiateResult(
+      ok: false,
+      error: lastError ?? 'Unable to connect to AutoCops DSR service.',
+    );
+  }
+
+  /// Verifies OTP and logs official DSR Request (Stage 2)
+  Future<DsrSubmitResult> submitDsrVerification({
+    required String name,
+    required String email,
+    required String requestType,
+    required String description,
+    required String challengeId,
+    required String otp,
+  }) async {
+    final cleanOtp = otp.trim();
+    final payload = {
+      'name': name.trim(),
+      'email': email.trim(),
+      'request_type': requestType,
+      'description': description.trim(),
+      'domain': domain,
+      'challenge_id': challengeId.trim(),
+      'otp': cleanOtp,
+      'code': cleanOtp,
+    };
+
+    final endpoints = [
+      'https://app.autocops.org/v1/public/dsr',
+      'https://autocops.org/v1/public/dsr',
+    ];
+
+    String? lastError;
+    for (final endpoint in endpoints) {
+      try {
+        final uri = Uri.parse(endpoint);
+        final response = await http
+            .post(
+              uri,
+              headers: {
+                'Content-Type': 'application/json; charset=UTF-8',
+                'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+              },
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 10));
+
+        debugPrint('[AutoCops DSR Submit] $endpoint returned ${response.statusCode}: ${response.body}');
+        final dynamic data = jsonDecode(response.body);
+
+        if (data is Map && (response.statusCode == 200 || data['ok'] == true)) {
+          return DsrSubmitResult(
+            ok: true,
+            requestId: data['request_id']?.toString(),
+            status: data['status']?.toString() ?? 'LOGGED',
+          );
+        } else if (data is Map) {
+          final err = (data['detail'] ?? data['message'] ?? 'Verification failed').toString();
+          if (response.statusCode < 500) {
+            return DsrSubmitResult(ok: false, error: err);
+          }
+          lastError = err;
+        }
+      } catch (e) {
+        debugPrint('[AutoCops DSR Submit] Error at $endpoint: $e');
+        lastError = e.toString();
+      }
+    }
+
+    return DsrSubmitResult(
+      ok: false,
+      error: lastError ?? 'Unable to verify DSR code. Please try again.',
+    );
+  }
 }
 
 class FormConsentItem {
@@ -565,3 +698,34 @@ class FormConsentResult {
     this.errorMessage,
   });
 }
+
+class DsrInitiateResult {
+  final bool ok;
+  final String? challengeId;
+  final String? emailMasked;
+  final String? message;
+  final String? error;
+
+  const DsrInitiateResult({
+    required this.ok,
+    this.challengeId,
+    this.emailMasked,
+    this.message,
+    this.error,
+  });
+}
+
+class DsrSubmitResult {
+  final bool ok;
+  final String? requestId;
+  final String? status;
+  final String? error;
+
+  const DsrSubmitResult({
+    required this.ok,
+    this.requestId,
+    this.status,
+    this.error,
+  });
+}
+

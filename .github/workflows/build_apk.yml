@@ -32,6 +32,11 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Enable Android Platform & Generate Native Files
+        run: |
+          flutter config --enable-android
+          flutter create --org com.veritas --project-name veritas_university_app --platforms=android .
+
       - name: Fetch Flutter Dependencies
         run: flutter pub get
 

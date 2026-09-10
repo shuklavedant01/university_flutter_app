@@ -29,14 +29,14 @@ jobs:
       - name: Setup Flutter Environment
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.3'
           channel: 'stable'
           cache: true
 
-      - name: Create local.properties File
+      - name: Generate Clean Android Platform
         run: |
-          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
+          cp pubspec.yaml pubspec.backup.yaml
+          flutter create --org com.veritas --project-name veritas_university_app --platforms=android .
+          cp pubspec.backup.yaml pubspec.yaml
 
       - name: Fetch Flutter Dependencies
         run: flutter pub get

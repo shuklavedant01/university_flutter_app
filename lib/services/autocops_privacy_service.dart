@@ -673,6 +673,267 @@ class AutoCopsPrivacyService extends ChangeNotifier {
       error: lastError ?? 'Unable to verify DSR code. Please try again.',
     );
   }
+
+  /// Initiates Dual-Channel Grievance Challenge (Email or SMS)
+  Future<GrievanceInitiateResult> initiateGrievanceChallenge({
+    required String name,
+    required String email,
+    required String phone,
+    required String category,
+    required String subject,
+    required String description,
+  }) async {
+    final cleanEmail = email.trim();
+    final cleanPhone = phone.trim();
+
+    // Determine target URL based on channel
+    final bool isMobileChannel = cleanEmail.isEmpty && cleanPhone.isNotEmpty;
+    final primaryEndpoint = isMobileChannel
+        ? 'https://app.autocops.org/v1/public/grievance/initiate-mobile'
+        : 'https://app.autocops.org/v1/public/grievance/initiate';
+
+    final payload = <String, dynamic>{
+      'name': name.trim(),
+      'category': category,
+      'subject': subject.trim(),
+      'description': description.trim(),
+      'preferred_language': _currentLanguage,
+      'domain': domain,
+    };
+
+    if (cleanEmail.isNotEmpty) {
+      payload['email'] = cleanEmail;
+    }
+    if (cleanPhone.isNotEmpty) {
+      payload['phone'] = cleanPhone;
+      payload['mobile'] = cleanPhone;
+    }
+
+    try {
+      final uri = Uri.parse(primaryEndpoint);
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json; charset=UTF-8',
+              'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      debugPrint('[AutoCops Grievance Initiate] $primaryEndpoint returned ${response.statusCode}: ${response.body}');
+      final dynamic data = jsonDecode(response.body);
+
+      if (data is Map && (response.statusCode == 200 || data['ok'] == true)) {
+        return GrievanceInitiateResult(
+          ok: true,
+          challengeId: data['challenge_id']?.toString(),
+          channel: data['channel']?.toString() ?? (isMobileChannel ? 'SMS' : 'email'),
+          emailMasked: data['email_masked']?.toString(),
+          message: data['message']?.toString(),
+        );
+      } else if (data is Map) {
+        return GrievanceInitiateResult(
+          ok: false,
+          error: (data['detail'] ?? data['message'] ?? 'Failed with status ${response.statusCode}').toString(),
+        );
+      }
+    } catch (e) {
+      debugPrint('[AutoCops Grievance Initiate] Error: $e');
+      return GrievanceInitiateResult(
+        ok: false,
+        error: 'Unable to connect to AutoCops Grievance service: $e',
+      );
+    }
+
+    return const GrievanceInitiateResult(
+      ok: false,
+      error: 'Unable to initiate verification code.',
+    );
+  }
+
+  /// Verifies OTP and logs official Grievance Docket (Stage 2)
+  Future<GrievanceSubmitResult> submitGrievanceVerification({
+    required String name,
+    required String email,
+    required String phone,
+    required String category,
+    required String subject,
+    required String description,
+    required String challengeId,
+    required String otp,
+  }) async {
+    final cleanOtp = otp.trim();
+    final cleanEmail = email.trim();
+    final cleanPhone = phone.trim();
+
+    final payload = <String, dynamic>{
+      'name': name.trim(),
+      'category': category,
+      'subject': subject.trim(),
+      'description': description.trim(),
+      'preferred_language': _currentLanguage,
+      'domain': domain,
+      'challenge_id': challengeId.trim(),
+      'otp': cleanOtp,
+      'code': cleanOtp,
+    };
+
+    if (cleanEmail.isNotEmpty) {
+      payload['email'] = cleanEmail;
+    }
+    if (cleanPhone.isNotEmpty) {
+      payload['phone'] = cleanPhone;
+      payload['mobile'] = cleanPhone;
+    }
+
+    const endpoint = 'https://app.autocops.org/v1/public/grievance';
+    try {
+      final uri = Uri.parse(endpoint);
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json; charset=UTF-8',
+              'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      debugPrint('[AutoCops Grievance Submit] $endpoint returned ${response.statusCode}: ${response.body}');
+      final dynamic data = jsonDecode(response.body);
+
+      if (data is Map && (response.statusCode == 200 || data['ok'] == true)) {
+        return GrievanceSubmitResult(
+          ok: true,
+          grievanceId: (data['grievance_id'] ?? data['id'])?.toString(),
+          status: data['status']?.toString() ?? 'SUBMITTED',
+          message: data['message']?.toString(),
+        );
+      } else if (data is Map) {
+        return GrievanceSubmitResult(
+          ok: false,
+          error: (data['detail'] ?? data['message'] ?? 'Verification failed').toString(),
+        );
+      }
+    } catch (e) {
+      debugPrint('[AutoCops Grievance Submit] Error: $e');
+      return GrievanceSubmitResult(
+        ok: false,
+        error: 'Network error submitting grievance: $e',
+      );
+    }
+
+    return const GrievanceSubmitResult(
+      ok: false,
+      error: 'Unable to verify grievance code. Please try again.',
+    );
+  }
+
+  /// Looks up grievance status by ticket ID
+  Future<GrievanceLookupResult> lookupGrievanceStatus({
+    required String grievanceId,
+    String? token,
+  }) async {
+    final cleanId = grievanceId.trim();
+    final queryParams = token != null && token.isNotEmpty ? '?token=$token' : '';
+    final endpoint = 'https://app.autocops.org/v1/public/grievance/$cleanId$queryParams';
+
+    try {
+      final uri = Uri.parse(endpoint);
+      final response = await http
+          .get(
+            uri,
+            headers: {
+              'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final dynamic data = jsonDecode(response.body);
+      if (data is Map && response.statusCode == 200) {
+        return GrievanceLookupResult(
+          ok: true,
+          grievanceId: (data['grievance_id'] ?? data['id'])?.toString() ?? cleanId,
+          status: data['status']?.toString() ?? 'PENDING',
+          category: data['category']?.toString(),
+          subject: data['subject']?.toString(),
+          resolutionSummary: data['resolution_summary']?.toString(),
+          resolvedAt: data['resolved_at']?.toString(),
+        );
+      } else if (data is Map) {
+        return GrievanceLookupResult(
+          ok: false,
+          error: (data['detail'] ?? data['message'] ?? 'Ticket not found').toString(),
+        );
+      }
+    } catch (e) {
+      return GrievanceLookupResult(
+        ok: false,
+        error: 'Failed to look up ticket: $e',
+      );
+    }
+
+    return const GrievanceLookupResult(
+      ok: false,
+      error: 'Unable to lookup grievance.',
+    );
+  }
+
+  /// Submits post-resolution feedback rating
+  Future<GrievanceFeedbackResult> submitGrievanceFeedback({
+    required String grievanceId,
+    required int rating,
+    required String comments,
+    String? token,
+  }) async {
+    final cleanId = grievanceId.trim();
+    final endpoint = 'https://app.autocops.org/v1/public/grievance/$cleanId/feedback';
+    final payload = {
+      if (token != null && token.isNotEmpty) 'token': token,
+      'rating': rating,
+      'comments': comments.trim(),
+    };
+
+    try {
+      final uri = Uri.parse(endpoint);
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json; charset=UTF-8',
+              'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final dynamic data = jsonDecode(response.body);
+      if (data is Map && (response.statusCode == 200 || data['ok'] == true)) {
+        return GrievanceFeedbackResult(
+          ok: true,
+          message: data['message']?.toString() ?? 'Feedback submitted successfully',
+        );
+      } else if (data is Map) {
+        return GrievanceFeedbackResult(
+          ok: false,
+          error: (data['detail'] ?? data['message'] ?? 'Failed to submit feedback').toString(),
+        );
+      }
+    } catch (e) {
+      return GrievanceFeedbackResult(
+        ok: false,
+        error: 'Network error submitting feedback: $e',
+      );
+    }
+
+    return const GrievanceFeedbackResult(
+      ok: false,
+      error: 'Unable to submit feedback.',
+    );
+  }
 }
 
 class FormConsentItem {
@@ -728,4 +989,73 @@ class DsrSubmitResult {
     this.error,
   });
 }
+
+class GrievanceInitiateResult {
+  final bool ok;
+  final String? challengeId;
+  final String? channel;
+  final String? emailMasked;
+  final String? message;
+  final String? error;
+
+  const GrievanceInitiateResult({
+    required this.ok,
+    this.challengeId,
+    this.channel,
+    this.emailMasked,
+    this.message,
+    this.error,
+  });
+}
+
+class GrievanceSubmitResult {
+  final bool ok;
+  final String? grievanceId;
+  final String? status;
+  final String? message;
+  final String? error;
+
+  const GrievanceSubmitResult({
+    required this.ok,
+    this.grievanceId,
+    this.status,
+    this.message,
+    this.error,
+  });
+}
+
+class GrievanceLookupResult {
+  final bool ok;
+  final String? grievanceId;
+  final String? status;
+  final String? category;
+  final String? subject;
+  final String? resolutionSummary;
+  final String? resolvedAt;
+  final String? error;
+
+  const GrievanceLookupResult({
+    required this.ok,
+    this.grievanceId,
+    this.status,
+    this.category,
+    this.subject,
+    this.resolutionSummary,
+    this.resolvedAt,
+    this.error,
+  });
+}
+
+class GrievanceFeedbackResult {
+  final bool ok;
+  final String? message;
+  final String? error;
+
+  const GrievanceFeedbackResult({
+    required this.ok,
+    this.message,
+    this.error,
+  });
+}
+
 

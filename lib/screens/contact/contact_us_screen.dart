@@ -66,7 +66,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           const SizedBox(height: 6),
           Text(
             'How can we assist you today?',
-            style: Theme.of(context).headlineLarge,
+            style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: 4),
           Text(

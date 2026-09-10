@@ -98,7 +98,7 @@ class _GrievanceFilingSheetState extends State<GrievanceFilingSheet> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.encrypted, color: AppColors.secondary, size: 22),
+                      const Icon(Icons.lock, color: AppColors.secondary, size: 22),
                       const SizedBox(width: 8),
                       Text(
                         'Confidential Docket Entry',
@@ -130,7 +130,7 @@ class _GrievanceFilingSheetState extends State<GrievanceFilingSheet> {
                       Expanded(
                         child: Text(
                           'Anonymous Mode Active: Your student ID and metadata will be stripped from this docket.',
-                          style: TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w600),
+                          style: TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],

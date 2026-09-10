@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AutoCopsConsentState {
@@ -216,54 +217,76 @@ class AutoCopsPrivacyService extends ChangeNotifier {
     required List<String> rejected,
     required String method,
   }) async {
-    try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 5);
+    // Normalize category keys to lowercase for AutoCops compliance engine
+    final acceptedCategories = accepted.map((c) => c.toLowerCase()).toList();
+    final rejectedCategories = rejected.map((c) => c.toLowerCase()).toList();
 
-      // 1. POST /v1/cookies/consents
-      final uri = Uri.parse('$apiBase/v1/cookies/consents');
-      final request = await client.postUrl(uri);
-      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json; charset=UTF-8');
-      request.headers.set(HttpHeaders.userAgentHeader, 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)');
+    final payload = {
+      'categories_accepted': acceptedCategories,
+      'categories_rejected': rejectedCategories,
+      'consent_method': method,
+      'data_principal_id': visitorId,
+      'domain': domain,
+      'geo_jurisdiction': 'IN',
+      'user_agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+      'observed_cookies': ['_ac_visitor_id', 'session_id'],
+    };
 
-      final payload = {
-        'categories_accepted': accepted,
-        'categories_rejected': rejected,
-        'consent_method': method,
-        'data_principal_id': visitorId,
-        'domain': domain,
-        'geo_jurisdiction': 'IN',
-        'user_agent': 'VeritasUniversityApp/1.0 (Android)',
-        'observed_cookies': ['_ac_visitor_id', 'session_id'],
-      };
+    final headers = {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+    };
 
-      request.write(jsonEncode(payload));
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        debugPrint('[AutoCops] Consent recorded successfully on cloud engine (200 OK)');
-      } else {
-        debugPrint('[AutoCops] Server responded with status: ${response.statusCode}');
-      }
+    final encodedPayload = jsonEncode(payload);
 
-      // 2. Optional: POST /v1/cookies/observed
+    // Primary and secondary AutoCops endpoints
+    final endpoints = [
+      'https://app.autocops.org/v1/cookies/consents',
+      'https://autocops.org/v1/cookies/consents',
+    ];
+
+    for (final endpoint in endpoints) {
       try {
-        final observedUri = Uri.parse('$apiBase/v1/cookies/observed');
-        final obsRequest = await client.postUrl(observedUri);
-        obsRequest.headers.set(HttpHeaders.contentTypeHeader, 'application/json; charset=UTF-8');
-        final obsPayload = {
-          'domain': domain,
-          'data_principal_id': visitorId,
-          'categories_accepted': accepted,
-          'categories_rejected': rejected,
-          'cookie_names': ['_ac_visitor_id', 'session_id'],
-        };
-        obsRequest.write(jsonEncode(obsPayload));
-        await obsRequest.close();
-      } catch (_) {}
+        final uri = Uri.parse(endpoint);
+        final response = await http
+            .post(
+              uri,
+              headers: headers,
+              body: encodedPayload,
+            )
+            .timeout(const Duration(seconds: 8));
 
-      client.close();
-    } catch (e) {
-      debugPrint('[AutoCops] Network transmission note: $e');
+        debugPrint('[AutoCops] Consent dispatched to $endpoint: ${response.statusCode} - ${response.body}');
+      } catch (e) {
+        debugPrint('[AutoCops] Network transmission note ($endpoint): $e');
+      }
+    }
+
+    // Also dispatch observed cookies for tracking verification
+    final observedEndpoints = [
+      'https://app.autocops.org/v1/cookies/observed',
+      'https://autocops.org/v1/cookies/observed',
+    ];
+
+    final obsPayload = jsonEncode({
+      'domain': domain,
+      'data_principal_id': visitorId,
+      'categories_accepted': acceptedCategories,
+      'categories_rejected': rejectedCategories,
+      'cookie_names': ['_ac_visitor_id', 'session_id'],
+    });
+
+    for (final endpoint in observedEndpoints) {
+      try {
+        final uri = Uri.parse(endpoint);
+        await http
+            .post(
+              uri,
+              headers: headers,
+              body: obsPayload,
+            )
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {}
     }
   }
 }

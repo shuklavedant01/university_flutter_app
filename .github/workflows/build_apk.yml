@@ -38,6 +38,13 @@ jobs:
           flutter create --org com.veritas --project-name veritas_university_app --platforms=android .
           cp pubspec.backup.yaml pubspec.yaml
 
+      - name: Configure Android Permissions in AndroidManifest
+        run: |
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>' android/app/src/main/AndroidManifest.xml
+          echo "=== android/app/src/main/AndroidManifest.xml ==="
+          cat android/app/src/main/AndroidManifest.xml
+
       - name: Fetch Flutter Dependencies
         run: flutter pub get
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/status_badge.dart';
 import '../../models/circular.dart';
+import '../contact/student_inquiry_form_screen.dart';
 
 class CampusHomeScreen extends StatelessWidget {
   final Function(int pageIndex)? onNavigateToTab;
@@ -390,7 +391,14 @@ class CampusHomeScreen extends StatelessWidget {
             final isGrievance = item['title'] == 'File Grievance';
             return InkWell(
               onTap: () {
-                onNavigateToTab?.call(item['tab'] as int);
+                if (item['title'] == 'Admissions & Status') {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (ctx) => const StudentInquiryFormScreen()),
+                  );
+                } else {
+                  onNavigateToTab?.call(item['tab'] as int);
+                }
               },
               borderRadius: BorderRadius.circular(12),
               child: Container(

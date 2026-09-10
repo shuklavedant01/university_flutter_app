@@ -464,4 +464,104 @@ class AutoCopsPrivacyService extends ChangeNotifier {
       } catch (_) {}
     }
   }
+
+  static const String apiKey = 'dpdp_c15c90e072957a2239a520f4a1372340bed2bce94d713d9f';
+
+  /// Captures individual DPDP consent records for each checked form purpose
+  Future<FormConsentResult> captureFormConsent({
+    required String email,
+    required String fullName,
+    required String phone,
+    required List<FormConsentItem> items,
+  }) async {
+    final List<String> registeredIds = [];
+    final endpoints = [
+      'https://app.autocops.org/v1/consent/external/capture',
+      'https://autocops.org/v1/consent/external/capture',
+    ];
+
+    for (final item in items) {
+      final payload = {
+        'consent_method': 'EXPLICIT',
+        'email': email.trim(),
+        'data_principal_email': email.trim(),
+        'data_principal_name': fullName.trim(),
+        'name': fullName.trim(),
+        'data_principal_phone': phone.trim(),
+        'phone': phone.trim(),
+        'geo_jurisdiction': 'IN',
+        'language': _currentLanguage,
+        'legal_basis': 'CONSENT',
+        'notice_version': 'www.autocops.org-v1',
+        'purpose': item.purposeDesc,
+        'purpose_category': item.purposeCategory,
+        'purpose_id': item.purposeId,
+        'visitor_id': visitorId,
+        'data_principal_id': visitorId,
+      };
+
+      for (final endpoint in endpoints) {
+        try {
+          final uri = Uri.parse(endpoint);
+          final response = await http
+              .post(
+                uri,
+                headers: {
+                  'Content-Type': 'application/json; charset=UTF-8',
+                  'X-API-Key': apiKey,
+                  'User-Agent': 'VeritasUniversityApp/1.0 (Android; AutoCops-SDK/2.5)',
+                },
+                body: jsonEncode(payload),
+              )
+              .timeout(const Duration(seconds: 8));
+
+          debugPrint('[AutoCops Form Consent] $endpoint response: ${response.statusCode} - ${response.body}');
+
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            try {
+              final resData = jsonDecode(response.body);
+              if (resData is Map && resData['consent_id'] != null) {
+                final cId = resData['consent_id'].toString();
+                if (!registeredIds.contains(cId)) {
+                  registeredIds.add(cId);
+                }
+              }
+            } catch (_) {}
+            break;
+          }
+        } catch (e) {
+          debugPrint('[AutoCops Form Consent] Error capturing ${item.purposeId} at $endpoint: $e');
+        }
+      }
+    }
+
+    return FormConsentResult(
+      success: registeredIds.isNotEmpty,
+      consentIds: registeredIds,
+    );
+  }
+}
+
+class FormConsentItem {
+  final String purposeId;
+  final String purposeCategory;
+  final String purposeDesc;
+
+  const FormConsentItem({
+    required this.purposeId,
+    required this.purposeCategory,
+    required this.purposeDesc,
+  });
+}
+
+class FormConsentResult {
+  final bool success;
+  final List<String> consentIds;
+  final String? errorMessage;
+
+  const FormConsentResult({
+    required this.success,
+    required this.consentIds,
+    this.errorMessage,
+  });
 }
